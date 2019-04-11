@@ -3,7 +3,10 @@ package com.example.googlemapsactivity;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
+import android.net.LinkAddress;
 import android.os.Build;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -11,6 +14,10 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
+import android.text.TextUtils;
+import android.util.Log;
+import android.view.View;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -29,6 +36,12 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
+import java.io.IOException;
+import java.io.StringReader;
+import java.util.List;
+
+import static android.media.CamcorderProfile.get;
+
 public class MapsActivity extends FragmentActivity implements
         OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
@@ -41,6 +54,8 @@ public class MapsActivity extends FragmentActivity implements
     private Location lastLoacation;
     private Marker currentUserLocationMarker;
     private static final int Request_User_Location_Code=99;
+    private double latitude,longitude;
+    private int ProximityRadius=10000;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -58,12 +73,88 @@ public class MapsActivity extends FragmentActivity implements
         mapFragment.getMapAsync(this);
     }
 
+    public void onClick(View v)
+    {
+        String restaurant="restaurant";
+        Object transferData[]= new Object[2];
+        GetNearbyPlaces getNearbyPlaces=new GetNearbyPlaces();
+        switch (v.getId())
+        {
+            case R.id.search_address:
+                EditText addressField=(EditText) findViewById(R.id.location_search);
+                  String address=addressField.getText().toString();
+                  List<Address> addressList=null;
+                  MarkerOptions userMarkerOptions=new MarkerOptions();
+                  if(!TextUtils.isEmpty(address))
+                  {
+                      Geocoder geocoder=new Geocoder(this);
+                      try
+                      {
+                          addressList=geocoder.getFromLocationName(address,6);
+                          if(addressList !=null)
+                          {
+                              for(int i=0;i<addressList.size();i++)
+                              {
+                                  Address userAddress=addressList.get(i);
+                                  LatLng latLng=new LatLng(userAddress.getLatitude(),userAddress.getLongitude());
+                                  userMarkerOptions.position(latLng);
+                                  userMarkerOptions.title(address);
+                                  userMarkerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ROSE));
+                                  mMap.addMarker(userMarkerOptions);
+                                  mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
+                                  mMap.animateCamera(CameraUpdateFactory.zoomTo(10));
+
+                              }
+                          }
+                          else
+                          {
+                              Toast.makeText(this , "Location not faund",Toast.LENGTH_SHORT).show();
+                          }
+                      }
+
+                      catch (IOException e)
+                      {
+                          e.printStackTrace();
+                      }
+
+
+                  }
+                  else
+                  {
+                      Toast.makeText(this,"Please write any location name",Toast.LENGTH_SHORT).show();
+                  }
+                  break;
+
+            case R.id.restaurant_nearby:
+                mMap.clear();
+                String url=getUrl(latitude,longitude,restaurant);
+                transferData[0]=mMap;
+                transferData[1]=url;
+
+                getNearbyPlaces.execute(transferData);
+                Toast.makeText(this, "Yaqindagi restarantlar qidirilmoqda...", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Yaqindagi restarantlar kursatilmoqda...", Toast.LENGTH_SHORT).show();
+            break;
+        }
+    }
+
+    private String getUrl(double latitude,double longitude,String nearbyPlace)
+    {
+      StringBuilder googleURL=new StringBuilder("https://maps.googleapis.com/maps/api/place/nearbysearch/json?");
+       googleURL.append("locatioon="+latitude+","+longitude);
+       googleURL.append("&type="+ProximityRadius);
+       googleURL.append("&sensor="+nearbyPlace);
+       googleURL.append("&key="+"AIzaSyBFvwH2eIk8cfN-F4_D4JjByMX33b3rifE");
+       return googleURL.toString();
+
+    }
+
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
         if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED)
-        { 
+        {
             buildGoogleApiClient();
             mMap.setMyLocationEnabled(true);
         }
@@ -101,7 +192,7 @@ public class MapsActivity extends FragmentActivity implements
                  if(grantResults.length>0 && grantResults[0]==PackageManager.PERMISSION_GRANTED)
                  {
                      if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED)
-                     {
+                      {
                           if(googleApiClient==null)
                           {
                               buildGoogleApiClient();
@@ -131,6 +222,8 @@ public class MapsActivity extends FragmentActivity implements
     @Override
     public void onLocationChanged(Location location)
     {
+        latitude=location.getLatitude();
+        longitude=location.getLongitude();
          lastLoacation=location;
          if(currentUserLocationMarker != null)
          {
